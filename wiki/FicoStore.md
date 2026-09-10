@@ -33,7 +33,10 @@ Implements `PersistentStore`:
 | `load` | Checks `perms::enforce_owner_or_fail`, decrypts `CDF1` blob, parses `FishDocument`, decodes `id_` prefix |
 | `save` | `ensure_storage_dir`, builds `FishDocument`, `to_string`, encrypt, `atomic_write_encrypted` (`0700` dir, `0600` file, `.tmp` + rename) |
 | `insert` / `update` / `delete` | In-memory, `delete` marks `deleted=true` |
-| `fetch` / `fetch_all` | `Request::apply` filtering |
+| `fetch` / `fetch_all` | `Request::apply` filtering, soft-deleted rows excluded (SQLite parity) |
+
+> **Note:** `save` purges soft-deleted tombstones, so rewrite-style
+> callers (delete-all + reinsert) cannot accumulate duplicates.
 
 ## Atomic Write
 

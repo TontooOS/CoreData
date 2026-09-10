@@ -63,4 +63,5 @@ See [Context.md](Context.md), [FicoStore.md](FicoStore.md) and [Crypto.md](Crypt
 
 ## Changelog
 
+- 2026-09-10: `FicoStore::fetch_all` excludes soft-deleted rows and `save` purges tombstones (fixes duplicate rows for rewrite-style callers, e.g. the Weather app)
 - 2026-08-26: Initial wiki for CoreData 26.1.0 – Fico/SQLite, Crypto, FishPerms isolation

@@ -124,6 +124,11 @@ impl PersistentStore for FicoStore {
         for (entity, objs) in &self.objects {
             let mut entity_table: IndexMap<String, FishValue> = IndexMap::new();
             for (id, obj) in objs {
+                // Purge soft-deleted tombstones so rewrite-style callers
+                // (delete-all + reinsert) cannot accumulate duplicates.
+                if obj.deleted {
+                    continue;
+                }
                 entity_table.insert(encode_id(id), obj.to_fish_value());
             }
             root.insert(entity.clone(), FishValue::Table(entity_table));
@@ -179,6 +184,10 @@ impl PersistentStore for FicoStore {
         let mut out = Vec::new();
         if let Some(map) = self.objects.get(entity) {
             for obj in map.values() {
+                // Soft-deleted rows stay out of results (SQLite parity).
+                if obj.deleted {
+                    continue;
+                }
                 out.push(obj.clone());
             }
         }

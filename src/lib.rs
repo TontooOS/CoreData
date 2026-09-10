@@ -100,8 +100,51 @@ mod integration_tests {
     }
 
     #[test]
-    fn sqlite_container_fetch_predicate() {
-        let (dir, _guard) = test_env("org.test.integration.sqlite");
+    fn fico_rewrite_cycle_has_no_duplicates() {
+        // Rewrite pattern (delete-all + reinsert, e.g. the Weather app):
+        // soft-deleted rows must neither reappear in fetch_all nor
+        // accumulate across save/load cycles.
+        let (dir, _guard) = test_env("org.test.rewrite.nodupes");
+        let mut c = PersistentContainer::new(None, StoreType::Fico).unwrap();
+        {
+            let mut ctx = c.view_context();
+            for name in ["Tokyo", "Berlin", "New York"] {
+                let mut o = ctx.create("SavedPlace");
+                o.set("name", name);
+                ctx.save_object(o).unwrap();
+            }
+            ctx.save().unwrap();
+        }
+        {
+            let mut ctx = c.view_context();
+            let ids: Vec<String> = ctx
+                .fetch_all("SavedPlace")
+                .unwrap()
+                .iter()
+                .map(|o| o.object_id.clone())
+                .collect();
+            assert_eq!(ids.len(), 3);
+            for id in ids {
+                ctx.delete(&id).unwrap();
+            }
+            for name in ["Tokyo", "Berlin", "New York", "Paris"] {
+                let mut o = ctx.create("SavedPlace");
+                o.set("name", name);
+                ctx.save_object(o).unwrap();
+            }
+            ctx.save().unwrap();
+            // Already filtered before reload.
+            assert_eq!(ctx.fetch_all("SavedPlace").unwrap().len(), 4);
+        }
+        let mut c2 = PersistentContainer::new(Some("org.test.rewrite.nodupes"), StoreType::Fico).unwrap();
+        let ctx2 = c2.view_context();
+        let all = ctx2.fetch_all("SavedPlace").unwrap();
+        assert_eq!(all.len(), 4);
+        drop(dir);
+    }
+
+    #[test]
+    fn sqlite_container_fetch_predicate() {        let (dir, _guard) = test_env("org.test.integration.sqlite");
         let mut c = PersistentContainer::new(None, StoreType::SQLite).unwrap();
         {
             let mut ctx = c.view_context();
