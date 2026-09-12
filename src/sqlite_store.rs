@@ -14,6 +14,9 @@ pub struct SqliteStore {
     bundle_id: String,
     path: PathBuf,
     conn: Option<Connection>,
+    // system-wide store under /System/Preferences: no bundle-owner check,
+    // directories resolve to the system root instead
+    system: bool,
 }
 
 impl SqliteStore {
@@ -24,6 +27,7 @@ impl SqliteStore {
             bundle_id,
             path,
             conn: None,
+            system: false,
         }
     }
 
@@ -32,6 +36,31 @@ impl SqliteStore {
             bundle_id: bundle_id.into(),
             path: path.into(),
             conn: None,
+            system: false,
+        }
+    }
+
+    /// System-wide store: `path` must point inside `/System/Preferences`.
+    /// Bundle-owner checks are skipped (the 0o700 directory owned by the
+    /// privileged writer enforces isolation).
+    pub fn with_system_path(bundle_id: impl Into<String>, path: impl Into<PathBuf>) -> Self {
+        Self {
+            bundle_id: bundle_id.into(),
+            path: path.into(),
+            conn: None,
+            system: true,
+        }
+    }
+
+    fn check_access(&self) -> Result<()> {
+        perms::enforce_access(&self.bundle_id, self.system)
+    }
+
+    fn ensure_dir(&self) -> Result<PathBuf> {
+        if self.system {
+            paths::ensure_system_storage_dir(&self.bundle_id)
+        } else {
+            paths::ensure_storage_dir(&self.bundle_id)
         }
     }
 
@@ -44,8 +73,8 @@ impl SqliteStore {
     }
 
     fn open(&mut self) -> Result<()> {
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
-        paths::ensure_storage_dir(&self.bundle_id)?;
+        self.check_access()?;
+        self.ensure_dir()?;
         let need_init = !self.path.exists();
         let conn = Connection::open(&self.path)?;
         conn.execute_batch(
@@ -100,7 +129,7 @@ impl PersistentStore for SqliteStore {
     }
 
     fn save(&self) -> Result<()> {
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         if let Some(conn) = &self.conn {
             let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
         }
@@ -108,7 +137,7 @@ impl PersistentStore for SqliteStore {
     }
 
     fn insert(&mut self, obj: ManagedObject) -> Result<()> {
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         self.ensure_conn()?;
         let conn = self.conn.as_ref().ok_or_else(|| crate::error::CoreDataError::custom("not loaded"))?;
         let blob = self.encrypt_blob(&obj.to_json())?;
@@ -125,7 +154,7 @@ impl PersistentStore for SqliteStore {
     }
 
     fn delete(&mut self, object_id: &str) -> Result<()> {
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         self.ensure_conn()?;
         let conn = self.conn.as_ref().ok_or_else(|| crate::error::CoreDataError::custom("not loaded"))?;
         // fetch, mark deleted, re-encrypt
@@ -146,13 +175,13 @@ impl PersistentStore for SqliteStore {
     }
 
     fn fetch(&self, request: &FetchRequest) -> Result<Vec<ManagedObject>> {
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         let all = self.fetch_all(&request.entity)?;
         Ok(request.apply(all))
     }
 
     fn fetch_all(&self, entity: &str) -> Result<Vec<ManagedObject>> {
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         let conn = self.conn.as_ref().ok_or_else(|| crate::error::CoreDataError::custom("not loaded"))?;
         let mut stmt = conn.prepare("SELECT data FROM objects WHERE entity = ?1 AND deleted = 0")?;
         let rows = stmt.query_map(params![entity], |row| row.get::<_, Vec<u8>>(0))?;

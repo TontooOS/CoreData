@@ -18,6 +18,9 @@ pub struct FicoStore {
     // entity -> id -> object
     objects: HashMap<String, HashMap<String, ManagedObject>>,
     loaded: bool,
+    // system-wide store under /System/Preferences: no bundle-owner check,
+    // locks and directories resolve to the system root instead
+    system: bool,
 }
 
 fn encode_id(id: &str) -> String {
@@ -42,6 +45,7 @@ impl FicoStore {
             path,
             objects: HashMap::new(),
             loaded: false,
+            system: false,
         }
     }
 
@@ -51,6 +55,48 @@ impl FicoStore {
             path: path.into(),
             objects: HashMap::new(),
             loaded: false,
+            system: false,
+        }
+    }
+
+    /// System-wide store: `path` must point inside `/System/Preferences`.
+    /// Bundle-owner checks are skipped (the 0o700 directory owned by the
+    /// privileged writer enforces isolation) and locks live beside the file.
+    pub fn with_system_path(bundle_id: impl Into<String>, path: impl Into<PathBuf>) -> Self {
+        Self {
+            bundle_id: bundle_id.into(),
+            path: path.into(),
+            objects: HashMap::new(),
+            loaded: false,
+            system: true,
+        }
+    }
+
+    fn check_access(&self) -> Result<()> {
+        perms::enforce_access(&self.bundle_id, self.system)
+    }
+
+    fn lock_shared(&self) -> Result<crate::lock::StorageLock> {
+        if self.system {
+            crate::lock::StorageLock::shared_for_system(&self.bundle_id)
+        } else {
+            crate::lock::StorageLock::shared(&self.bundle_id)
+        }
+    }
+
+    fn lock_exclusive(&self) -> Result<crate::lock::StorageLock> {
+        if self.system {
+            crate::lock::StorageLock::exclusive_for_system(&self.bundle_id)
+        } else {
+            crate::lock::StorageLock::exclusive(&self.bundle_id)
+        }
+    }
+
+    fn ensure_dir(&self) -> Result<PathBuf> {
+        if self.system {
+            paths::ensure_system_storage_dir(&self.bundle_id)
+        } else {
+            paths::ensure_storage_dir(&self.bundle_id)
         }
     }
 
@@ -89,8 +135,8 @@ impl FicoStore {
 
 impl PersistentStore for FicoStore {
     fn load(&mut self) -> Result<()> {
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
-        let _lock = crate::lock::StorageLock::shared(&self.bundle_id)?;
+        self.check_access()?;
+        let _lock = self.lock_shared()?;
         if !self.path.exists() {
             self.objects.clear();
             self.loaded = true;
@@ -117,9 +163,9 @@ impl PersistentStore for FicoStore {
     }
 
     fn save(&self) -> Result<()> {
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
-        let _lock = crate::lock::StorageLock::exclusive(&self.bundle_id)?;
-        paths::ensure_storage_dir(&self.bundle_id)?;
+        self.check_access()?;
+        let _lock = self.lock_exclusive()?;
+        self.ensure_dir()?;
         let mut root: IndexMap<String, FishValue> = IndexMap::new();
         for (entity, objs) in &self.objects {
             let mut entity_table: IndexMap<String, FishValue> = IndexMap::new();
@@ -141,7 +187,7 @@ impl PersistentStore for FicoStore {
 
     fn insert(&mut self, obj: ManagedObject) -> Result<()> {
         self.ensure_loaded()?;
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         let e = obj.entity.clone();
         let id = obj.object_id.clone();
         self.objects.entry(e).or_default().insert(id, obj);
@@ -150,7 +196,7 @@ impl PersistentStore for FicoStore {
 
     fn update(&mut self, obj: ManagedObject) -> Result<()> {
         self.ensure_loaded()?;
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         let e = obj.entity.clone();
         let id = obj.object_id.clone();
         let entry = self.objects.entry(e).or_default();
@@ -163,7 +209,7 @@ impl PersistentStore for FicoStore {
 
     fn delete(&mut self, object_id: &str) -> Result<()> {
         self.ensure_loaded()?;
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         for objs in self.objects.values_mut() {
             if let Some(o) = objs.get_mut(object_id) {
                 o.mark_deleted();
@@ -180,7 +226,7 @@ impl PersistentStore for FicoStore {
 
     fn fetch_all(&self, entity: &str) -> Result<Vec<ManagedObject>> {
         // For read, also enforce? read should also be denied for foreign
-        perms::enforce_owner_or_fail(&self.bundle_id)?;
+        self.check_access()?;
         let mut out = Vec::new();
         if let Some(map) = self.objects.get(entity) {
             for obj in map.values() {

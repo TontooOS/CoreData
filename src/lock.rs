@@ -17,6 +17,17 @@ impl StorageLock {
     /// Acquire exclusive lock for bundle's storage dir.
     pub fn exclusive(bundle_id: &str) -> Result<Self> {
         let dir = crate::paths::ensure_storage_dir(bundle_id)?;
+        Self::exclusive_for_storage_dir(&dir)
+    }
+
+    /// Acquire exclusive lock for a system-wide storage dir.
+    pub fn exclusive_for_system(bundle_id: &str) -> Result<Self> {
+        let dir = crate::paths::ensure_system_storage_dir(bundle_id)?;
+        Self::exclusive_for_storage_dir(&dir)
+    }
+
+    /// Acquire exclusive lock on the `.lock` file inside `dir`.
+    pub fn exclusive_for_storage_dir(dir: &Path) -> Result<Self> {
         let lock_path = dir.join(".lock");
         let file = OpenOptions::new()
             .create(true)
@@ -39,6 +50,17 @@ impl StorageLock {
 
     pub fn shared(bundle_id: &str) -> Result<Self> {
         let dir = crate::paths::ensure_storage_dir(bundle_id)?;
+        Self::shared_for_storage_dir(&dir)
+    }
+
+    /// Acquire shared lock for a system-wide storage dir.
+    pub fn shared_for_system(bundle_id: &str) -> Result<Self> {
+        let dir = crate::paths::ensure_system_storage_dir(bundle_id)?;
+        Self::shared_for_storage_dir(&dir)
+    }
+
+    /// Acquire shared lock on the `.lock` file inside `dir`.
+    pub fn shared_for_storage_dir(dir: &Path) -> Result<Self> {
         let lock_path = dir.join(".lock");
         let file = OpenOptions::new()
             .create(true)

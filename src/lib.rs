@@ -1,7 +1,10 @@
 //! Tontoo CoreData – encrypted, per-app isolated persistence
 //!
-//! Stores are encrypted and isolated per bundle id at
-//! `/Users/<user>/Library/Preferences/<bundleId>/storage.{fico,sqlite}`
+//! Per-user stores are encrypted and isolated per bundle id at
+//! `/Users/<user>/Library/Preferences/<bundleId>/storage.{fico,sqlite}`.
+//! System-wide stores shared by all users live encrypted at
+//! `/System/Preferences/<bundleId>/storage.{fico,sqlite}` (see
+//! `PersistentContainer::new_system_with_bundle`).
 //! Only supported on TontooOS / Arch Linux (WSL ArchLinux).
 //!
 //! # Quick Start
@@ -100,8 +103,57 @@ mod integration_tests {
     }
 
     #[test]
-    fn fico_rewrite_cycle_has_no_duplicates() {
-        // Rewrite pattern (delete-all + reinsert, e.g. the Weather app):
+    fn system_container_roundtrip_encrypted_with_locked_down_perms() {
+        let guard = crate::TEST_ENV_LOCK.lock().unwrap();
+        let dir = TempDir::new().unwrap();
+        std::env::set_var(
+            "TONTOO_SYSTEM_PREFERENCES_ROOT",
+            dir.path().to_string_lossy().to_string(),
+        );
+        std::env::set_var("TONTOO_COREDATA_ALLOW_FOREIGN", "1");
+        let keyfile = dir.path().join("keyfile");
+        std::env::set_var("TONTOO_COREDATA_KEY_FILE", keyfile.to_string_lossy().to_string());
+        let bundle = format!("org.test.system.{}", std::process::id());
+        let mut c =
+            PersistentContainer::new_system_with_bundle(bundle.clone(), StoreType::Fico).unwrap();
+        {
+            let mut ctx = c.view_context();
+            let mut o = ctx.create("Secret");
+            o.set("data", "system secret");
+            ctx.save_object(o).unwrap();
+            ctx.save().unwrap();
+        }
+        let mut c2 =
+            PersistentContainer::new_system_with_bundle(bundle.clone(), StoreType::Fico).unwrap();
+        let ctx2 = c2.view_context();
+        let all = ctx2.fetch_all("Secret").unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].get_str("data"), Some("system secret"));
+
+        let fico = dir.path().join(&bundle).join("storage.fico");
+        assert!(fico.exists());
+        let raw = std::fs::read(&fico).unwrap();
+        assert!(raw.starts_with(b"CDF1"));
+        assert!(!raw.windows(13).any(|w| w == b"system secret"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir_mode = std::fs::metadata(dir.path().join(&bundle))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(dir_mode, 0o700);
+            let file_mode = std::fs::metadata(&fico).unwrap().permissions().mode() & 0o777;
+            assert_eq!(file_mode, 0o600);
+        }
+        std::env::remove_var("TONTOO_SYSTEM_PREFERENCES_ROOT");
+        drop(dir);
+        drop(guard);
+    }
+
+    #[test]
+    fn fico_rewrite_cycle_has_no_duplicates() {        // Rewrite pattern (delete-all + reinsert, e.g. the Weather app):
         // soft-deleted rows must neither reappear in fetch_all nor
         // accumulate across save/load cycles.
         let (dir, _guard) = test_env("org.test.rewrite.nodupes");

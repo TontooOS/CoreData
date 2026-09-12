@@ -74,6 +74,37 @@ pub unsafe extern "C" fn coredata_open(bundle_id: *const c_char, store_type: *co
     }
 }
 
+/// System-wide variant of `coredata_open`: the store lives encrypted at
+/// `/System/Preferences/<bundle_id>/storage.{fico,sqlite}` and is shared
+/// by all users. Only privileged writers can create it.
+/// # Safety
+/// Both pointers must be valid nul-terminated C strings or null (null returns error).
+#[no_mangle]
+pub unsafe extern "C" fn coredata_open_system(bundle_id: *const c_char, store_type: *const c_char) -> *mut ContainerHandle {
+    clear_last_error();
+    if bundle_id.is_null() || store_type.is_null() {
+        set_last_error("null bundle_id or store_type".into());
+        return ptr::null_mut();
+    }
+    let bundle = CStr::from_ptr(bundle_id).to_string_lossy().to_string();
+    let st = CStr::from_ptr(store_type).to_string_lossy().to_string().to_lowercase();
+    let store_ty = match st.as_str() {
+        "fico" | "fishfile" => StoreType::Fico,
+        "sqlite" | "sqlite3" => StoreType::SQLite,
+        _ => {
+            set_last_error(format!("unknown store type: {}", st));
+            return ptr::null_mut();
+        }
+    };
+    match PersistentContainer::new_system_with_bundle(bundle, store_ty) {
+        Ok(c) => Box::into_raw(Box::new(ContainerHandle { container: c })),
+        Err(e) => {
+            set_last_error(e.to_string());
+            ptr::null_mut()
+        }
+    }
+}
+
 /// # Safety
 /// `handle` must be a valid pointer from `coredata_open` or null.
 #[no_mangle]

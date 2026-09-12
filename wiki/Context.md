@@ -8,15 +8,16 @@
 pub struct PersistentContainer { bundle_id: String, store_type: StoreType, store: Box<dyn PersistentStore> }
 ```
 
-### `new` / `new_with_bundle` / `new_with_path`
+### `new` / `new_with_bundle` / `new_with_path` / `new_system_with_bundle`
 
 ```rust
 pub fn new(bundle_id: Option<&str>, store_type: StoreType) -> Result<Self>
 pub fn new_with_bundle(bundle_id: String, store_type: StoreType) -> Result<Self>
 pub fn new_with_path(bundle_id: &str, store_type: StoreType, path: PathBuf) -> Result<Self>
+pub fn new_system_with_bundle(bundle_id: String, store_type: StoreType) -> Result<Self>
 ```
 
-`new(None, ..)` resolves bundle via `paths::resolve_bundle_id`. Checks FishPerms `Storage` silent policy, calls `store.load()`.
+`new(None, ..)` resolves bundle via `paths::resolve_bundle_id`. Checks FishPerms `Storage` silent policy, calls `store.load()`. `new_system_with_bundle` stores encrypted at `/System/Preferences/<bundle_id>/` for all users; bundle-owner checks are skipped and isolation is enforced by the `0700` directory.
 
 ### `view_context`
 

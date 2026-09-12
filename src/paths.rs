@@ -129,9 +129,26 @@ pub fn preferences_root() -> PathBuf {
     tontoo_home().join("Library").join("Preferences")
 }
 
+/// Root for system-wide preferences shared by all users: /System/Preferences.
+/// Only privileged daemons can write here; the directory itself is created
+/// with 0o700 so unprivileged callers fail with an I/O permission error.
+/// Tests override the root via TONTOO_SYSTEM_PREFERENCES_ROOT.
+pub fn system_preferences_root() -> PathBuf {
+    if let Ok(over) = std::env::var("TONTOO_SYSTEM_PREFERENCES_ROOT") {
+        return PathBuf::from(over);
+    }
+    PathBuf::from("/System/Preferences")
+}
+
 /// Storage directory for a bundle: /Users/<user>/Library/Preferences/<bundleId>
 pub fn storage_dir(bundle_id: &str) -> PathBuf {
     preferences_root().join(bundle_id)
+}
+
+/// System-wide storage directory for a bundle:
+/// /System/Preferences/<bundleId>
+pub fn system_storage_dir(bundle_id: &str) -> PathBuf {
+    system_preferences_root().join(bundle_id)
 }
 
 /// Specific file path for storage.
@@ -151,9 +168,44 @@ pub fn meta_path(bundle_id: &str) -> PathBuf {
     storage_path(bundle_id, "meta")
 }
 
+/// Specific system-wide file path for storage.
+pub fn system_storage_path(bundle_id: &str, extension: &str) -> PathBuf {
+    system_storage_dir(bundle_id).join(format!("storage.{}", extension))
+}
+
+pub fn system_fico_path(bundle_id: &str) -> PathBuf {
+    system_storage_path(bundle_id, "fico")
+}
+
+pub fn system_sqlite_path(bundle_id: &str) -> PathBuf {
+    system_storage_path(bundle_id, "sqlite")
+}
+
+pub fn system_meta_path(bundle_id: &str) -> PathBuf {
+    system_storage_path(bundle_id, "meta")
+}
+
 /// Ensure storage directory exists with 0o700 perms.
 pub fn ensure_storage_dir(bundle_id: &str) -> Result<PathBuf> {
     let dir = storage_dir(bundle_id);
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&dir)?.permissions();
+            perms.set_mode(0o700);
+            let _ = std::fs::set_permissions(&dir, perms);
+        }
+    }
+    Ok(dir)
+}
+
+/// Ensure the system-wide storage directory exists with 0o700 perms.
+/// Returns an I/O error for unprivileged callers that may not create
+/// `/System/Preferences/<bundleId>`.
+pub fn ensure_system_storage_dir(bundle_id: &str) -> Result<PathBuf> {
+    let dir = system_storage_dir(bundle_id);
     if !dir.exists() {
         std::fs::create_dir_all(&dir)?;
         #[cfg(unix)]
@@ -206,5 +258,40 @@ mod tests {
         std::env::set_var("TONTOO_PREFERENCES_ROOT", "/tmp/tontoo_prefs");
         assert_eq!(preferences_root(), PathBuf::from("/tmp/tontoo_prefs"));
         std::env::remove_var("TONTOO_PREFERENCES_ROOT");
+    }
+
+    #[test]
+    fn test_system_paths() {
+        let _guard = crate::TEST_ENV_LOCK.lock().unwrap();
+        let prev = std::env::var("TONTOO_SYSTEM_PREFERENCES_ROOT").ok();
+        std::env::remove_var("TONTOO_SYSTEM_PREFERENCES_ROOT");
+        assert_eq!(system_preferences_root(), PathBuf::from("/System/Preferences"));
+        assert_eq!(
+            system_storage_dir("com.tontoo.wifi"),
+            PathBuf::from("/System/Preferences/com.tontoo.wifi")
+        );
+        assert_eq!(
+            system_fico_path("com.tontoo.wifi"),
+            PathBuf::from("/System/Preferences/com.tontoo.wifi/storage.fico")
+        );
+        assert_eq!(
+            system_sqlite_path("com.tontoo.wifi"),
+            PathBuf::from("/System/Preferences/com.tontoo.wifi/storage.sqlite")
+        );
+        if let Some(v) = prev {
+            std::env::set_var("TONTOO_SYSTEM_PREFERENCES_ROOT", v);
+        }
+    }
+
+    #[test]
+    fn test_system_root_override() {
+        let _guard = crate::TEST_ENV_LOCK.lock().unwrap();
+        std::env::set_var("TONTOO_SYSTEM_PREFERENCES_ROOT", "/tmp/tontoo_sys_prefs");
+        assert_eq!(system_preferences_root(), PathBuf::from("/tmp/tontoo_sys_prefs"));
+        assert_eq!(
+            system_fico_path("com.tontoo.wifi"),
+            PathBuf::from("/tmp/tontoo_sys_prefs/com.tontoo.wifi/storage.fico")
+        );
+        std::env::remove_var("TONTOO_SYSTEM_PREFERENCES_ROOT");
     }
 }

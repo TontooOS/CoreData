@@ -58,6 +58,18 @@ typedef struct ContainerHandle ContainerHandle;
 ContainerHandle* coredata_open(const char *bundle_id, const char *store_type);
 
 /**
+ * Open a system-wide container shared by all users.
+ * Storage is encrypted at /System/Preferences/<bundle_id>/storage.{fico,sqlite}.
+ * Only privileged writers can create it; unprivileged callers fail with an
+ * I/O permission error.
+ *
+ * @param bundle_id bundle identifier, e.g. "com.tontoo.wifi"
+ * @param store_type "fico" or "sqlite" (case-insensitive)
+ * @return handle or NULL on error (check coredata_last_error)
+ */
+ContainerHandle* coredata_open_system(const char *bundle_id, const char *store_type);
+
+/**
  * Close and free a container.
  * @param handle container handle
  */

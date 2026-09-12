@@ -45,14 +45,41 @@ impl PersistentContainer {
     }
 
     /// For tests – inject custom path prefix via env
-    pub fn new_with_path(bundle_id: &str, store_type: StoreType, path: std::path::PathBuf) -> Result<Self> {
-        crate::perms::enforce_owner_or_fail(bundle_id)?;
+    pub fn new_with_path(bundle_id: &str, store_type: StoreType, path: std::path::PathBuf) -> Result<Self> {        crate::perms::enforce_owner_or_fail(bundle_id)?;
         let store: Box<dyn PersistentStore> = match store_type {
             StoreType::Fico => Box::new(FicoStore::with_path(bundle_id, path)),
             StoreType::SQLite => Box::new(SqliteStore::with_path(bundle_id, path)),
         };
         let mut c = Self {
             bundle_id: bundle_id.to_string(),
+            store_type,
+            store,
+            _path_override: None,
+        };
+        c.store.load()?;
+        Ok(c)
+    }
+
+    /// System-wide container shared by all users, stored encrypted at
+    /// `/System/Preferences/<bundle_id>/storage.{fico,sqlite}`.
+    /// Bundle-owner checks are skipped: only a privileged writer (e.g. a
+    /// system daemon) can create the 0o700 directory, and unprivileged
+    /// callers fail with an I/O permission error instead.
+    pub fn new_system_with_bundle(bundle_id: String, store_type: StoreType) -> Result<Self> {
+        crate::perms::ensure_storage_policy(&bundle_id);
+        crate::paths::ensure_system_storage_dir(&bundle_id)?;
+        let store: Box<dyn PersistentStore> = match store_type {
+            StoreType::Fico => Box::new(FicoStore::with_system_path(
+                bundle_id.clone(),
+                crate::paths::system_fico_path(&bundle_id),
+            )),
+            StoreType::SQLite => Box::new(SqliteStore::with_system_path(
+                bundle_id.clone(),
+                crate::paths::system_sqlite_path(&bundle_id),
+            )),
+        };
+        let mut c = Self {
+            bundle_id,
             store_type,
             store,
             _path_override: None,

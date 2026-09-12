@@ -121,6 +121,19 @@ pub fn is_owner(owner_bundle_id: &str) -> bool {
 /// Strict check that aborts if not owner – used when daemon unreachable.
 /// For unit tests, allow bypass via TONTOO_COREDATA_ALLOW_FOREIGN=1
 pub fn enforce_owner_or_fail(owner_bundle_id: &str) -> Result<()> {
+    enforce_access(owner_bundle_id, false)
+}
+
+/// Owner check shared by per-user and system-wide stores.
+/// Per-user stores (`system == false`) enforce bundle isolation.
+/// System-wide stores (`system == true`) skip the bundle check: the writer
+/// is a privileged daemon and isolation is enforced by the 0o700 directory
+/// itself, so unprivileged callers fail with an I/O permission error when
+/// they cannot open the files.
+pub fn enforce_access(owner_bundle_id: &str, system: bool) -> Result<()> {
+    if system {
+        return Ok(());
+    }
     if std::env::var("TONTOO_COREDATA_ALLOW_FOREIGN").map(|v| v == "1").unwrap_or(false) {
         return Ok(());
     }

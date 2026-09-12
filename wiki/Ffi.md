@@ -14,6 +14,7 @@ C header and cdylib for `/Library/System/coredata.library`.
 | `coredata_last_error()` | `char*` | Allocated error string or NULL, free with `coredata_free_string` |
 | `coredata_free_string(char*)` | `void` | Free string from `coredata_get` / `coredata_last_error` |
 | `coredata_open(bundle_id, store_type)` | `ContainerHandle*` | Open container, `store_type="fico"` or `"sqlite"`, NULL on error |
+| `coredata_open_system(bundle_id, store_type)` | `ContainerHandle*` | Open system-wide container at `/System/Preferences/<bundle_id>`, NULL on error |
 | `coredata_close(handle)` | `void` | Close and free |
 | `coredata_save(handle)` | `int` | `0` ok, `-1` error |
 | `coredata_set(handle, entity, object_id, key, json_value)` | `int` | `0` ok, `-1` error; `json_value` is JSON or plain string |
@@ -28,6 +29,7 @@ C header and cdylib for `/Library/System/coredata.library`.
 | `coredata_get` return | `coredata_free_string` |
 | `coredata_last_error` return | `coredata_free_string` |
 | `coredata_open` handle | `coredata_close` |
+| `coredata_open_system` handle | `coredata_close` |
 
 ## Rust Side
 
