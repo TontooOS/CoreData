@@ -143,11 +143,8 @@ pub unsafe extern "C" fn coredata_set(handle: *mut ContainerHandle, entity: *con
     let key_s = CStr::from_ptr(key).to_string_lossy().to_string();
     let val_s = CStr::from_ptr(json_value).to_string_lossy().to_string();
 
-    let json: serde_json::Value = match serde_json::from_str(&val_s) {
-        Ok(v) => v,
-        Err(_) => serde_json::Value::String(val_s.clone()),
-    };
-    let fish_val = fishfile::FishValue::from_json(&json);
+    let fish_val = fishfile::FishValue::from_json_str(&val_s)
+        .unwrap_or_else(|_| fishfile::FishValue::String(val_s.clone()));
 
     let mut ctx = h.container.view_context();
     let mut obj = match ctx.object(&entity_s, &id_s) {
@@ -176,10 +173,8 @@ pub unsafe extern "C" fn coredata_get(handle: *mut ContainerHandle, entity: *con
     match ctx2.object(&entity_s, &id_s) {
         Ok(obj) => {
             if let Some(v) = obj.get(&key_s) {
-                let json = v.to_json();
-                if let Ok(s) = serde_json::to_string(&json) {
-                    if let Ok(cs) = CString::new(s) { return cs.into_raw(); }
-                }
+                let s = v.to_json_string();
+                if let Ok(cs) = CString::new(s) { return cs.into_raw(); }
             }
             set_last_error(format!("key not found: {}", key_s));
             ptr::null_mut()

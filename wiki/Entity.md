@@ -45,7 +45,8 @@ pub fn to_json(&self) -> serde_json::Value
 pub fn from_json(v: &serde_json::Value) -> Option<Self>
 ```
 
-Used by `SqliteStore` blob.
+Manual conversion (same shape as the former serde output, so stored blobs
+stay compatible). Used by `SqliteStore` blob.
 
 ### `mark_deleted`
 

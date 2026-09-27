@@ -3,11 +3,10 @@
 use chrono::{DateTime, Utc};
 use fishfile::FishValue;
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A single managed object (row / document).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ManagedObject {
     /// Stable object ID – UUID v4
     pub object_id: String,
@@ -138,13 +137,46 @@ impl ManagedObject {
         })
     }
 
-    /// To JSON for SQLite blob
+    /// To JSON for SQLite blob (same shape as the former serde output).
     pub fn to_json(&self) -> serde_json::Value {
-        serde_json::to_value(self).unwrap_or(serde_json::Value::Null)
+        let mut values = serde_json::Map::new();
+        for (k, v) in &self.values {
+            values.insert(k.clone(), fish_to_json(v));
+        }
+        serde_json::json!({
+            "object_id": self.object_id,
+            "entity": self.entity,
+            "values": values,
+            "rev": self.rev,
+            "updated_at": self.updated_at.to_rfc3339(),
+            "deleted": self.deleted,
+        })
     }
 
     pub fn from_json(v: &serde_json::Value) -> Option<Self> {
-        serde_json::from_value(v.clone()).ok()
+        let object_id = v.get("object_id")?.as_str()?.to_string();
+        let entity = v.get("entity")?.as_str()?.to_string();
+        let values = v
+            .get("values")?
+            .as_object()?
+            .iter()
+            .map(|(k, x)| (k.clone(), fish_from_json(x)))
+            .collect();
+        let rev = v.get("rev")?.as_u64()?;
+        let updated_at = v
+            .get("updated_at")?
+            .as_str()?
+            .parse::<DateTime<Utc>>()
+            .ok()?;
+        let deleted = v.get("deleted")?.as_bool()?;
+        Some(Self {
+            object_id,
+            entity,
+            values,
+            rev,
+            updated_at,
+            deleted,
+        })
     }
 
     /// Convenience helpers for typed access
@@ -162,14 +194,65 @@ impl ManagedObject {
     }
 }
 
+/// Manual FishValue <-> serde_json bridge (CoreData keeps its own
+/// serde_json for SQLite blobs; FishValue no longer implements Serialize).
+fn fish_to_json(v: &FishValue) -> serde_json::Value {
+    match v {
+        FishValue::Null => serde_json::Value::Null,
+        FishValue::Bool(b) => serde_json::Value::Bool(*b),
+        FishValue::Integer(i) => serde_json::Value::Number((*i).into()),
+        FishValue::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        FishValue::String(s) => serde_json::Value::String(s.clone()),
+        FishValue::Array(items) => {
+            serde_json::Value::Array(items.iter().map(fish_to_json).collect())
+        }
+        FishValue::Table(table) => {
+            let mut map = serde_json::Map::new();
+            for (k, val) in table {
+                map.insert(k.clone(), fish_to_json(val));
+            }
+            serde_json::Value::Object(map)
+        }
+    }
+}
+
+fn fish_from_json(v: &serde_json::Value) -> FishValue {
+    match v {
+        serde_json::Value::Null => FishValue::Null,
+        serde_json::Value::Bool(b) => FishValue::Bool(*b),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                FishValue::Integer(i)
+            } else if let Some(f) = n.as_f64() {
+                FishValue::Float(f)
+            } else {
+                FishValue::String(n.to_string())
+            }
+        }
+        serde_json::Value::String(s) => FishValue::String(s.clone()),
+        serde_json::Value::Array(items) => {
+            FishValue::Array(items.iter().map(fish_from_json).collect())
+        }
+        serde_json::Value::Object(map) => {
+            let mut table = IndexMap::new();
+            for (k, val) in map {
+                table.insert(k.clone(), fish_from_json(val));
+            }
+            FishValue::Table(table)
+        }
+    }
+}
+
 /// Entity description – schema hint (lightweight, no strict validation like full CoreData yet)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EntityDescription {
     pub name: String,
     pub attributes: Vec<AttributeDescription>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AttributeDescription {
     pub name: String,
     pub attribute_type: AttributeType,
@@ -177,7 +260,7 @@ pub struct AttributeDescription {
     pub default_value: Option<FishValue>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttributeType {
     String,
     Integer,

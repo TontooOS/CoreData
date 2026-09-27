@@ -33,7 +33,7 @@ C header and cdylib for `/Library/System/coredata.library`.
 
 ## Rust Side
 
-`src/ffi.rs` holds `PersistentContainer` in `Box<ContainerHandle>` and uses `Mutex<Option<String>>` for `LAST_ERROR`. `coredata_set` parses `json_value` via `serde_json::from_str`, fallback to string, converts to `FishValue::from_json`.
+`src/ffi.rs` holds `PersistentContainer` in `Box<ContainerHandle>` and uses `Mutex<Option<String>>` for `LAST_ERROR`. `coredata_set` parses `json_value` via `FishValue::from_json_str`, fallback to string. `coredata_get` renders values via `FishValue::to_json_string`.
 
 ## Usage / Example
 
