@@ -4,7 +4,7 @@ pub type Result<T> = std::result::Result<T, CoreDataError>;
 pub enum CoreDataError {
     Io(std::io::Error),
     FishFile(fishfile::FishError),
-    Sqlite(rusqlite::Error),
+    Sqlite(sqlkit::SqlError),
     Serde(serde_json::Error),
     Crypto(String),
     NoBundle,
@@ -58,8 +58,8 @@ impl From<fishfile::FishError> for CoreDataError {
     }
 }
 
-impl From<rusqlite::Error> for CoreDataError {
-    fn from(e: rusqlite::Error) -> Self {
+impl From<sqlkit::SqlError> for CoreDataError {
+    fn from(e: sqlkit::SqlError) -> Self {
         Self::Sqlite(e)
     }
 }

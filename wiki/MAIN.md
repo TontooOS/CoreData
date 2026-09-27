@@ -63,6 +63,7 @@ See [Context.md](Context.md), [FicoStore.md](FicoStore.md) and [Crypto.md](Crypt
 
 ## Changelog
 
+- 2026-09-27: SQLite backend migrated from `rusqlite` to Tontoo `SQLKit` (zero third-party SQLite; `PersistentStore: Send` kept via thread-safe `Connection`); old `rusqlite` files stay readable, new files stay real SQLite; `rusqlite` remains a dev-dependency for migration tests only
 - 2026-09-12: System-wide stores (`PersistentContainer::new_system_with_bundle`, `/System/Preferences/<bundle>/storage.{fico,sqlite}`, `coredata_open_system`): encrypted, 0o700 directory, no bundle-owner check
 - 2026-09-10: `FicoStore::fetch_all` excludes soft-deleted rows and `save` purges tombstones (fixes duplicate rows for rewrite-style callers, e.g. the Weather app)
 - 2026-08-26: Initial wiki for CoreData 26.1.0 – Fico/SQLite, Crypto, FishPerms isolation

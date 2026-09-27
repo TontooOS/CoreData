@@ -21,7 +21,7 @@ dirs = "5"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 fishfile = { path = "../FishFile" }
-rusqlite = { version = "0.32", features = ["bundled"] }
+sqlkit = { path = "../SQLKit" }
 aes-gcm = "0.10"
 hkdf = "0.12"
 sha2 = "0.10"
@@ -37,3 +37,6 @@ ffi = []
 
 [dev-dependencies]
 tempfile = "3"
+# Migration test only: proves files written by the old rusqlite backend
+# stay readable. Never a production dependency.
+rusqlite = { version = "0.32", features = ["bundled"] }

@@ -4,7 +4,8 @@ SQLite blob-encrypted backend.
 
 ## Overview
 
-`rusqlite` bundled (`libsqlite3-sys` with `bundled` feature). Table:
+Tontoo `SQLKit` (dependency-light, zero third-party SQLite; ruslite-compatible
+API, native B-Tree files). Table:
 
 ```sql
 CREATE TABLE objects (
@@ -19,6 +20,15 @@ CREATE INDEX idx_entity ON objects(entity);
 ```
 
 Each row's `data` is `crypto::encrypt(serde_json::to_vec(ManagedObject))`. WAL mode `journal_mode=WAL`.
+
+## Backend Migration
+
+Files written by the old `rusqlite` backend stay readable: SQLKit opens
+them through its foreign B-Tree read path and migrates them to the native
+layout on the first write. Files written by SQLKit stay real SQLite files
+readable by `rusqlite`, the SQLite CLI, and CPython `sqlite3`. Covered by
+`sqlite_rusqlite_file_stays_readable` and `sqlite_file_readable_by_rusqlite`
+(`rusqlite` remains a dev-dependency for these migration tests only).
 
 ## API
 

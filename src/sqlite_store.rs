@@ -1,4 +1,4 @@
-//! SQLiteStore – rusqlite + AES-GCM blob encryption
+//! SQLiteStore – SQLKit + AES-GCM blob encryption
 
 use crate::crypto;
 use crate::entity::ManagedObject;
@@ -7,7 +7,7 @@ use crate::fetch::FetchRequest;
 use crate::paths;
 use crate::perms;
 use crate::store::{PersistentStore, StoreType};
-use rusqlite::{params, Connection, OptionalExtension};
+use sqlkit::{params, Connection, OptionalExtension};
 use std::path::PathBuf;
 
 pub struct SqliteStore {
@@ -273,5 +273,75 @@ mod tests {
         let path = paths::sqlite_path("org.test.sqlite");
         let raw = std::fs::read(&path).unwrap();
         assert!(!raw.windows(6).any(|w| w == b"secret"));
+    }
+
+    #[test]
+    fn sqlite_rusqlite_file_stays_readable() {
+        // Simulate a store file written by the old rusqlite backend: same
+        // schema, blobs encrypted with the same bundle key. SQLKit must
+        // read it through the foreign B-Tree path.
+        let (_dir, mut store, _guard) = setup();
+        let path = paths::sqlite_path("org.test.sqlite");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let mut obj = ManagedObject::new("Legacy");
+        obj.set("title", "from rusqlite");
+        let blob =
+            crate::crypto::encrypt(&serde_json::to_vec(&obj.to_json()).unwrap(), "org.test.sqlite")
+                .unwrap();
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE objects (
+                    id TEXT PRIMARY KEY,
+                    entity TEXT NOT NULL,
+                    data BLOB NOT NULL,
+                    rev INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    deleted INTEGER NOT NULL DEFAULT 0
+                )",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO objects (id, entity, data, rev, updated_at, deleted) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![
+                    obj.object_id,
+                    obj.entity,
+                    blob,
+                    obj.rev as i64,
+                    obj.updated_at.to_rfc3339(),
+                    obj.deleted as i32
+                ],
+            )
+            .unwrap();
+        }
+        store.load().unwrap();
+        let fetched = store.fetch_all("Legacy").unwrap();
+        assert_eq!(fetched.len(), 1);
+        assert_eq!(fetched[0].get_str("title"), Some("from rusqlite"));
+    }
+
+    #[test]
+    fn sqlite_file_readable_by_rusqlite() {
+        // Forward interop: files written by SQLKit stay real SQLite files.
+        let (_dir, mut store, _guard) = setup();
+        store.load().unwrap();
+        let mut obj = ManagedObject::new("Note");
+        obj.set("title", "interop");
+        store.insert(obj).unwrap();
+        drop(store);
+        let path = paths::sqlite_path("org.test.sqlite");
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM objects", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(n, 1);
+        let check: String = conn
+            .query_row(
+                "SELECT name FROM pragma_table_info('objects') WHERE cid = 0",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(check, "id");
     }
 }
