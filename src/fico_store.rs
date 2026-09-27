@@ -8,7 +8,7 @@ use crate::paths;
 use crate::perms;
 use crate::store::{PersistentStore, StoreType};
 use fishfile::{FishDocument, FishValue};
-use indexmap::IndexMap;
+use foundation::collections::OrderedMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -166,9 +166,9 @@ impl PersistentStore for FicoStore {
         self.check_access()?;
         let _lock = self.lock_exclusive()?;
         self.ensure_dir()?;
-        let mut root: IndexMap<String, FishValue> = IndexMap::new();
+        let mut root: OrderedMap<String, FishValue> = OrderedMap::new();
         for (entity, objs) in &self.objects {
-            let mut entity_table: IndexMap<String, FishValue> = IndexMap::new();
+            let mut entity_table: OrderedMap<String, FishValue> = OrderedMap::new();
             for (id, obj) in objs {
                 // Purge soft-deleted tombstones so rewrite-style callers
                 // (delete-all + reinsert) cannot accumulate duplicates.

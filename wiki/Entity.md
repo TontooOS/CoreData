@@ -8,7 +8,7 @@
 pub struct ManagedObject {
     pub object_id: String,   // UUID v4
     pub entity: String,
-    pub values: IndexMap<String, FishValue>,
+    pub values: OrderedMap<String, FishValue>,
     pub rev: u64,
     pub updated_at: DateTime<Utc>,
     pub deleted: bool,

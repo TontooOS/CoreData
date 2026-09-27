@@ -17,7 +17,7 @@ readme = "README.md"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
-indexmap = { version = "2", features = ["serde"] }
+foundation = { path = "../Foundation" }
 dirs = "5"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }

@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use fishfile::FishValue;
-use indexmap::IndexMap;
+use foundation::collections::OrderedMap;
 use uuid::Uuid;
 
 /// A single managed object (row / document).
@@ -13,7 +13,7 @@ pub struct ManagedObject {
     /// Entity / table name
     pub entity: String,
     /// Attributes
-    pub values: IndexMap<String, FishValue>,
+    pub values: OrderedMap<String, FishValue>,
     /// Revision for sync (Lamport)
     pub rev: u64,
     /// Updated at
@@ -27,7 +27,7 @@ impl ManagedObject {
         Self {
             object_id: Uuid::new_v4().to_string(),
             entity: entity.into(),
-            values: IndexMap::new(),
+            values: OrderedMap::new(),
             rev: 1,
             updated_at: Utc::now(),
             deleted: false,
@@ -38,7 +38,7 @@ impl ManagedObject {
         Self {
             object_id: id.into(),
             entity: entity.into(),
-            values: IndexMap::new(),
+            values: OrderedMap::new(),
             rev: 1,
             updated_at: Utc::now(),
             deleted: false,
@@ -78,7 +78,7 @@ impl ManagedObject {
 
     /// Convert to FishValue::Table for Fico storage.
     pub fn to_fish_value(&self) -> FishValue {
-        let mut t = IndexMap::new();
+        let mut t = OrderedMap::new();
         t.insert("object_id".to_string(), FishValue::String(self.object_id.clone()));
         t.insert("entity".to_string(), FishValue::String(self.entity.clone()));
         t.insert("rev".to_string(), FishValue::Integer(self.rev as i64));
@@ -92,7 +92,7 @@ impl ManagedObject {
 
     pub fn from_fish_value(entity_hint: &str, id: &str, v: &FishValue) -> Option<Self> {
         let table = v.as_table()?;
-        let mut values = IndexMap::new();
+        let mut values = OrderedMap::new();
         let mut rev = 1u64;
         let mut updated_at = Utc::now();
         let mut deleted = false;
@@ -236,7 +236,7 @@ fn fish_from_json(v: &serde_json::Value) -> FishValue {
             FishValue::Array(items.iter().map(fish_from_json).collect())
         }
         serde_json::Value::Object(map) => {
-            let mut table = IndexMap::new();
+            let mut table = OrderedMap::new();
             for (k, val) in map {
                 table.insert(k.clone(), fish_from_json(val));
             }
