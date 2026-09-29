@@ -21,7 +21,7 @@ extern "C" {
 
 /**
  * Get CoreData library version.
- * @return static version string, e.g. "26.1.0" (do NOT free)
+ * @return static version string, e.g. "27.0.0" (do NOT free)
  */
 const char* coredata_version(void);
 

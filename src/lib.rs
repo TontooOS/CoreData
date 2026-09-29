@@ -47,7 +47,7 @@ pub use fetch::{FetchRequest, Predicate, PredicateOperator, SortDescriptor};
 pub use store::StoreType;
 
 pub const COREDATA_VERSION: (u32, u32, u32) = (26, 1, 0);
-pub const COREDATA_VERSION_STR: &str = "26.1.0";
+pub const COREDATA_VERSION_STR: &str = "27.0.0";
 
 #[cfg(target_os = "windows")]
 compile_error!("CoreData only supports TontooOS / Arch Linux – use WSL ArchLinux (wsl -d archlinux)");

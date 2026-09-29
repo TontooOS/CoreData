@@ -38,7 +38,7 @@ pub unsafe extern "C" fn coredata_free_string(s: *mut c_char) {
 
 #[no_mangle]
 pub extern "C" fn coredata_version() -> *const c_char {
-    c"26.1.0".as_ptr()
+    c"27.0.0".as_ptr()
 }
 
 // Opaque handle to PersistentContainer

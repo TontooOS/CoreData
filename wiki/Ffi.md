@@ -10,7 +10,7 @@ C header and cdylib for `/Library/System/coredata.library`.
 
 | Function | Return | Meaning |
 |---|---|---|
-| `coredata_version()` | `const char*` | Static version `"26.1.0"` |
+| `coredata_version()` | `const char*` | Static version `"27.0.0"` |
 | `coredata_last_error()` | `char*` | Allocated error string or NULL, free with `coredata_free_string` |
 | `coredata_free_string(char*)` | `void` | Free string from `coredata_get` / `coredata_last_error` |
 | `coredata_open(bundle_id, store_type)` | `ContainerHandle*` | Open container, `store_type="fico"` or `"sqlite"`, NULL on error |
