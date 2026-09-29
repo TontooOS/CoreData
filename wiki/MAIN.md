@@ -3,7 +3,7 @@
 Encrypted, per-app isolated persistence for TontooOS. FishFile `.fico` and SQLite backends with AES-256-GCM, hardware-bound keys (TPM 2.0 / machine-id) at `/Users/<user>/Library/Preferences/<bundleId>/storage.{fico,sqlite}`. CoreData-like API with `PersistentContainer` and `ManagedObjectContext`.
 
 - Repository: https://github.com/TontooOS/CoreData
-- License: TCL v26.1
+- License: TCL v27.0
 - Version: 27.0.0
 
 ## Feature Index
