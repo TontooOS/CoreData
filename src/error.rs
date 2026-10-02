@@ -5,7 +5,9 @@ pub enum CoreDataError {
     Io(std::io::Error),
     FishFile(fishfile::FishError),
     Sqlite(sqlkit::SqlError),
-    Serde(serde_json::Error),
+    /// JSON encoding or decoding failed. The message comes from
+    /// `foundation::serialization`.
+    Serde(String),
     Crypto(String),
     NoBundle,
     PermissionDenied { caller: String, owner: String },
@@ -23,7 +25,7 @@ impl std::fmt::Display for CoreDataError {
             Self::Io(e) => write!(f, "I/O error: {}", e),
             Self::FishFile(e) => write!(f, "fishfile error: {}", e),
             Self::Sqlite(e) => write!(f, "sqlite error: {}", e),
-            Self::Serde(e) => write!(f, "serde error: {}", e),
+            Self::Serde(e) => write!(f, "json error: {}", e),
             Self::Crypto(message) => write!(f, "crypto error: {}", message),
             Self::NoBundle => write!(
                 f,
@@ -64,13 +66,12 @@ impl From<sqlkit::SqlError> for CoreDataError {
     }
 }
 
-impl From<serde_json::Error> for CoreDataError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Serde(e)
-    }
-}
-
 impl CoreDataError {
+    /// Wrap a `foundation::serialization` failure.
+    pub fn json(e: impl std::fmt::Display) -> Self {
+        Self::Serde(e.to_string())
+    }
+
     pub fn crypto(msg: impl Into<String>) -> Self {
         Self::Crypto(msg.into())
     }

@@ -6,11 +6,11 @@
 
 ```rust
 pub struct ManagedObject {
-    pub object_id: String,   // UUID v4
+    pub object_id: String,   // UUID v4 from foundation::uuid
     pub entity: String,
     pub values: OrderedMap<String, FishValue>,
     pub rev: u64,
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: foundation::date::Date,
     pub deleted: bool,
 }
 ```
@@ -22,7 +22,20 @@ pub fn new(entity: impl Into<String>) -> Self
 pub fn with_id(entity: impl Into<String>, id: impl Into<String>) -> Self
 ```
 
-Creates UUID v4. `rev` starts at `1`, `updated_at = Utc::now()`.
+Creates a UUID v4. `rev` starts at `1`, `updated_at = Date::now()`.
+
+### `updated_at_string` / `parse_timestamp`
+
+```rust
+pub fn updated_at_string(&self) -> String
+pub fn parse_timestamp(text: &str) -> Option<foundation::date::Date>
+```
+
+`updated_at_string` renders RFC 3339 as `2026-01-01T12:00:00.000Z`.
+`parse_timestamp` accepts that form **and** the nanosecond form written by
+older builds (`2026-01-01T12:00:00.123456789+00:00`), so existing `.fico`
+and SQLite stores keep loading. `Foundation::date::Date` has second
+resolution; sub-second precision from old files is truncated on read.
 
 ### `get` / `set` / `remove`
 
@@ -41,12 +54,15 @@ Serializes to `FishValue::Table` with meta keys `object_id`, `entity`, `rev`, `u
 ### `to_json` / `from_json`
 
 ```rust
-pub fn to_json(&self) -> serde_json::Value
-pub fn from_json(v: &serde_json::Value) -> Option<Self>
+pub fn to_json(&self) -> foundation::serialization::JsonValue
+pub fn from_json(v: &foundation::serialization::JsonValue) -> Option<Self>
 ```
 
-Manual conversion (same shape as the former serde output, so stored blobs
-stay compatible). Used by `SqliteStore` blob.
+Manual conversion on top of Foundation's JSON, not derive macros. The
+member shape is unchanged from the former serde output (`object_id`,
+`entity`, `values`, `rev`, `updated_at`, `deleted`), so blobs written by
+earlier builds still decrypt and load. `FishValue` floats that are not
+finite encode as `null`. Used by `SqliteStore`.
 
 ### `mark_deleted`
 

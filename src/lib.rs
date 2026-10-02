@@ -62,8 +62,8 @@ pub mod prelude {
 }
 
 #[cfg(test)]
-pub(crate) static TEST_ENV_LOCK: once_cell::sync::Lazy<std::sync::Mutex<()>> =
-    once_cell::sync::Lazy::new(|| std::sync::Mutex::new(()));
+pub(crate) static TEST_ENV_LOCK: std::sync::LazyLock<std::sync::Mutex<()>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(()));
 
 #[cfg(test)]
 mod integration_tests {

@@ -29,7 +29,7 @@ pub fn preferences_root() -> PathBuf
 pub fn tontoo_home() -> PathBuf
 ```
 
-`preferences_root` respects `TONTOO_PREFERENCES_ROOT` override (used in tests), else `tontoo_home()/Library/Preferences`. `tontoo_home` checks `HOME` env first (accepts `/Users/...` even on Windows), else `dirs::home_dir()`.
+`preferences_root` respects `TONTOO_PREFERENCES_ROOT` override (used in tests), else `tontoo_home()/Library/Preferences`. `tontoo_home` checks `HOME` env first (accepts `/Users/...` even on Windows), else `foundation::paths::home_dir()`.
 
 ### `storage_dir` / `storage_path` / `fico_path` / `sqlite_path`
 

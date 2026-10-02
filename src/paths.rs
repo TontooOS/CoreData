@@ -97,11 +97,12 @@ fn read_bundle_id_from_info(path: &Path) -> Option<String> {
         return None;
     }
     let text = std::fs::read_to_string(path).ok()?;
-    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let v = foundation::serialization::JsonValue::parse(&text).ok()?;
     v.get("bundle_id")?.as_str().map(|s| s.to_string())
 }
 
-/// TontooOS home is /Users/<user> (mac-style). We derive from HOME env or dirs::home_dir.
+/// TontooOS home is /Users/<user> (mac-style). We derive from the HOME env,
+/// then from Foundation's XDG-aware home lookup.
 pub fn tontoo_home() -> PathBuf {
     if let Ok(home) = std::env::var("HOME") {
         let trimmed = home.trim();
@@ -112,7 +113,11 @@ pub fn tontoo_home() -> PathBuf {
             }
         }
     }
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/Users").join(whoami_fallback()))
+    let fallback = foundation::paths::home_dir();
+    if fallback.as_os_str().is_empty() || fallback == PathBuf::from(".") {
+        return PathBuf::from("/Users").join(whoami_fallback());
+    }
+    fallback
 }
 
 fn whoami_fallback() -> String {

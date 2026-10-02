@@ -1,9 +1,8 @@
 //! FetchRequest – NSPredicate/NSSortDescriptor inspired
 
 use crate::entity::ManagedObject;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PredicateOperator {
     Equal,
     NotEqual,
@@ -17,7 +16,7 @@ pub enum PredicateOperator {
     In,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Predicate {
     pub key: String,
     pub op: PredicateOperator,
@@ -132,7 +131,7 @@ impl Predicate {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SortDescriptor {
     pub key: String,
     pub ascending: bool,

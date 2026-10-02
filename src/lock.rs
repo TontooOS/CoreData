@@ -1,16 +1,15 @@
 //! File lock for storage – exclusive flock on TontooOS/Arch
 //!
 //! Prevents concurrent writers from corrupting `storage.fico` / `storage.sqlite`.
-//! Uses `fs2::FileExt` (flock) on a `.lock` file beside the storage.
+//! Uses `foundation::file::FileLock`, a thin `flock(2)` wrapper, on a `.lock`
+//! file beside the storage.
 
 use crate::error::{CoreDataError, Result};
-use fs2::FileExt;
-use std::fs::{File, OpenOptions};
+use foundation::file::FileLock;
 use std::path::{Path, PathBuf};
 
 pub struct StorageLock {
-    _file: File,
-    path: PathBuf,
+    lock: FileLock,
 }
 
 impl StorageLock {
@@ -28,24 +27,9 @@ impl StorageLock {
 
     /// Acquire exclusive lock on the `.lock` file inside `dir`.
     pub fn exclusive_for_storage_dir(dir: &Path) -> Result<Self> {
-        let lock_path = dir.join(".lock");
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(CoreDataError::Io)?;
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::metadata(&lock_path).map(|m| {
-                let mut p = m.permissions();
-                p.set_mode(0o600);
-                let _ = std::fs::set_permissions(&lock_path, p);
-            });
-        }
-        file.lock_exclusive().map_err(CoreDataError::Io)?;
-        Ok(Self { _file: file, path: lock_path })
+        Ok(Self {
+            lock: open_lock_file(dir, LockMode::Exclusive)?,
+        })
     }
 
     pub fn shared(bundle_id: &str) -> Result<Self> {
@@ -61,43 +45,66 @@ impl StorageLock {
 
     /// Acquire shared lock on the `.lock` file inside `dir`.
     pub fn shared_for_storage_dir(dir: &Path) -> Result<Self> {
-        let lock_path = dir.join(".lock");
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(CoreDataError::Io)?;
-        file.lock_shared().map_err(CoreDataError::Io)?;
-        Ok(Self { _file: file, path: lock_path })
+        Ok(Self {
+            lock: open_lock_file(dir, LockMode::Shared)?,
+        })
     }
 
-    /// Try to acquire with timeout for tests? For now blocking.
+    /// Try to acquire the lock without blocking. Returns `Ok(None)` when
+    /// another process already holds it.
     pub fn try_exclusive(bundle_id: &str) -> Result<Option<Self>> {
         let dir = crate::paths::ensure_storage_dir(bundle_id)?;
         let lock_path = dir.join(".lock");
-        let file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .truncate(false)
-            .open(&lock_path)
-            .map_err(CoreDataError::Io)?;
-        match file.try_lock_exclusive() {
-            Ok(()) => Ok(Some(Self { _file: file, path: lock_path })),
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-            Err(e) => Err(CoreDataError::Io(e)),
-        }
+        Ok(FileLock::try_exclusive(&lock_path)
+            .map_err(|e| match e {
+                foundation::error::FoundationError::Io(e) => CoreDataError::Io(e),
+                other => CoreDataError::custom(other.to_string()),
+            })?
+            .map(|lock| Self { lock }))
     }
 
     pub fn path(&self) -> &Path {
-        &self.path
+        self.lock.path()
     }
 }
 
-impl Drop for StorageLock {
-    fn drop(&mut self) {
-        let _ = self._file.unlock();
+/// Which kind of lock to take on a storage directory.
+#[derive(Clone, Copy)]
+enum LockMode {
+    Exclusive,
+    Shared,
+}
+
+/// Open `<dir>/.lock` as owner-only and take the requested lock.
+fn open_lock_file(dir: &Path, mode: LockMode) -> Result<FileLock> {
+    let lock_path = dir.join(".lock");
+    std::fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(CoreDataError::Io)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::metadata(&lock_path).map(|m| {
+            let mut p = m.permissions();
+            p.set_mode(0o600);
+            let _ = std::fs::set_permissions(&lock_path, p);
+        });
     }
+    let result = match mode {
+        LockMode::Exclusive => FileLock::exclusive(&lock_path),
+        LockMode::Shared => FileLock::shared(&lock_path),
+    };
+    result.map_err(|e| match e {
+        foundation::error::FoundationError::Io(e) => CoreDataError::Io(e),
+        other => CoreDataError::custom(other.to_string()),
+    })
+}
+
+/// The path of a storage directory's lock file.
+pub fn lock_path_for(dir: &Path) -> PathBuf {
+    dir.join(".lock")
 }

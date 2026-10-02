@@ -8,6 +8,7 @@
 //! We speak the same JSON framing as fishperms-protocol but without linking it.
 
 use crate::error::{CoreDataError, Result};
+use foundation::serialization::JsonValue;
 use std::path::PathBuf;
 
 const DEFAULT_SOCKET: &str = "/run/fishperms.sock";
@@ -60,16 +61,23 @@ fn check_via_daemon(caller: &str, owner: &str) -> std::result::Result<bool, ()> 
     let _ = stream.set_read_timeout(Some(Duration::from_millis(500)));
     let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
 
-    let req = serde_json::json!({
-        "v": 1,
-        "id": 1,
-        "method": "check",
-        "params": { "permission": "storage", "app": owner, "caller": caller }
-    });
-    let payload = serde_json::to_vec(&req).map_err(|_| ())?;
+    let req = foundation::serialization::JsonValue::Object(vec![
+        ("v".to_string(), JsonValue::Integer(1)),
+        ("id".to_string(), JsonValue::Integer(1)),
+        ("method".to_string(), JsonValue::Str("check".to_string())),
+        (
+            "params".to_string(),
+            JsonValue::Object(vec![
+                ("permission".to_string(), JsonValue::Str("storage".to_string())),
+                ("app".to_string(), JsonValue::Str(owner.to_string())),
+                ("caller".to_string(), JsonValue::Str(caller.to_string())),
+            ]),
+        ),
+    ]);
+    let payload = req.stringify(false);
     let len = payload.len() as u32;
     stream.write_all(&len.to_le_bytes()).map_err(|_| ())?;
-    stream.write_all(&payload).map_err(|_| ())?;
+    stream.write_all(payload.as_bytes()).map_err(|_| ())?;
 
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf).map_err(|_| ())?;
@@ -79,16 +87,17 @@ fn check_via_daemon(caller: &str, owner: &str) -> std::result::Result<bool, ()> 
     }
     let mut buf = vec![0u8; resp_len];
     stream.read_exact(&mut buf).map_err(|_| ())?;
-    let resp: serde_json::Value = serde_json::from_slice(&buf).map_err(|_| ())?;
-    if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+    let text = std::str::from_utf8(&buf).map_err(|_| ())?;
+    let resp = JsonValue::parse(text).map_err(|_| ())?;
+    if resp.get("ok").and_then(JsonValue::as_bool) == Some(true) {
         if let Some(result) = resp.get("result") {
             if let Some(s) = result.as_str() {
                 return Ok(s == "allowed");
             }
-            if let Some(state) = result.get("state").and_then(|v| v.as_str()) {
+            if let Some(state) = result.get("state").and_then(JsonValue::as_str) {
                 return Ok(state == "allowed");
             }
-            if let Some(allow) = result.get("allowed").and_then(|v| v.as_bool()) {
+            if let Some(allow) = result.get("allowed").and_then(JsonValue::as_bool) {
                 return Ok(allow);
             }
         }

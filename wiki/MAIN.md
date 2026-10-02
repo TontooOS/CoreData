@@ -63,6 +63,7 @@ See [Context.md](Context.md), [FicoStore.md](FicoStore.md) and [Crypto.md](Crypt
 
 ## Changelog
 
+- 2026-10-02: Dependency cleanup. `serde`, `serde_json`, `chrono`, `uuid`, `dirs`, `once_cell`, `fs2` and `base64` removed; `ManagedObject::updated_at` is now `foundation::date::Date` (second resolution, both timestamp spellings still parse) and `to_json` / `from_json` work on `foundation::serialization::JsonValue`. Storage locking moved to the new `foundation::file::FileLock`. Only the crypto crates (`aes-gcm`, `hkdf`, `sha2`, `rand`, `zeroize`) remain. See [Entity.md](Entity.md) and [Paths.md](Paths.md).
 - 2026-09-27: SQLite backend migrated from `rusqlite` to Tontoo `SQLKit` (zero third-party SQLite; `PersistentStore: Send` kept via thread-safe `Connection`); old `rusqlite` files stay readable, new files stay real SQLite; `rusqlite` remains a dev-dependency for migration tests only
 - 2026-09-12: System-wide stores (`PersistentContainer::new_system_with_bundle`, `/System/Preferences/<bundle>/storage.{fico,sqlite}`, `coredata_open_system`): encrypted, 0o700 directory, no bundle-owner check
 - 2026-09-10: `FicoStore::fetch_all` excludes soft-deleted rows and `save` purges tombstones (fixes duplicate rows for rewrite-style callers, e.g. the Weather app)

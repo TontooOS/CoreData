@@ -7,6 +7,7 @@ use crate::fetch::FetchRequest;
 use crate::paths;
 use crate::perms;
 use crate::store::{PersistentStore, StoreType};
+use foundation::serialization::JsonValue;
 use sqlkit::{params, Connection, OptionalExtension};
 use std::path::PathBuf;
 
@@ -110,14 +111,16 @@ impl SqliteStore {
         Ok(())
     }
 
-    fn encrypt_blob(&self, json: &serde_json::Value) -> Result<Vec<u8>> {
-        let bytes = serde_json::to_vec(json).map_err(crate::error::CoreDataError::Serde)?;
+    fn encrypt_blob(&self, json: &JsonValue) -> Result<Vec<u8>> {
+        let bytes = json.stringify(false).into_bytes();
         crypto::encrypt(&bytes, &self.bundle_id)
     }
 
     fn decrypt_blob(&self, blob: &[u8]) -> Result<ManagedObject> {
         let dec = crypto::decrypt(blob, &self.bundle_id)?;
-        let v: serde_json::Value = serde_json::from_slice(&dec)?;
+        let text = std::str::from_utf8(&dec)
+            .map_err(|e| crate::error::CoreDataError::json(e))?;
+        let v = JsonValue::parse(text).map_err(crate::error::CoreDataError::json)?;
         ManagedObject::from_json(&v).ok_or_else(|| crate::error::CoreDataError::crypto("invalid object json"))
     }
 }
@@ -143,7 +146,7 @@ impl PersistentStore for SqliteStore {
         let blob = self.encrypt_blob(&obj.to_json())?;
         conn.execute(
             "INSERT OR REPLACE INTO objects (id, entity, data, rev, updated_at, deleted) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![obj.object_id, obj.entity, blob, obj.rev as i64, obj.updated_at.to_rfc3339(), obj.deleted as i32],
+            params![obj.object_id, obj.entity, blob, obj.rev as i64, obj.updated_at_string(), obj.deleted as i32],
         )?;
         Ok(())
     }
@@ -166,7 +169,7 @@ impl PersistentStore for SqliteStore {
             let new_blob = self.encrypt_blob(&obj.to_json())?;
             conn.execute(
                 "UPDATE objects SET data = ?1, rev = ?2, updated_at = ?3, deleted = 1 WHERE id = ?4",
-                params![new_blob, obj.rev as i64, obj.updated_at.to_rfc3339(), object_id],
+                params![new_blob, obj.rev as i64, obj.updated_at_string(), object_id],
             )?;
             Ok(())
         } else {
@@ -286,8 +289,7 @@ mod tests {
         let mut obj = ManagedObject::new("Legacy");
         obj.set("title", "from rusqlite");
         let blob =
-            crate::crypto::encrypt(&serde_json::to_vec(&obj.to_json()).unwrap(), "org.test.sqlite")
-                .unwrap();
+            crate::crypto::encrypt(obj.to_json().stringify(false).as_bytes(), "org.test.sqlite").unwrap();
         {
             let conn = rusqlite::Connection::open(&path).unwrap();
             conn.execute_batch(
@@ -308,7 +310,7 @@ mod tests {
                     obj.entity,
                     blob,
                     obj.rev as i64,
-                    obj.updated_at.to_rfc3339(),
+                    obj.updated_at_string(),
                     obj.deleted as i32
                 ],
             )

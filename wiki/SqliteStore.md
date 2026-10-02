@@ -19,7 +19,7 @@ CREATE TABLE objects (
 CREATE INDEX idx_entity ON objects(entity);
 ```
 
-Each row's `data` is `crypto::encrypt(serde_json::to_vec(ManagedObject))`. WAL mode `journal_mode=WAL`.
+Each row's `data` is `crypto::encrypt(ManagedObject::to_json().stringify(false))`, rendered by `foundation::serialization::JsonValue`. WAL mode `journal_mode=WAL`.
 
 ## Backend Migration
 
